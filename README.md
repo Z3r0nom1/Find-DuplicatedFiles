@@ -73,6 +73,10 @@ This CSV file lists all files identified as duplicates based on their SHA1 hashe
 
 The script includes mechanisms to handle common issues, such as inaccessible files or temporary file access errors. It will retry failed hash computations up to 3 times before skipping a file.
 
+## Acknowledgments
+
+This script is based on the original work done by PSOne Tools. You can find the original script at the [PowerShell Gallery](https://www.powershellgallery.com/packages/PSOneTools/1.8/Content/Find-PSOneDuplicateFile.ps1).
+
 ## Contributing
 
 If you'd like to contribute to this script, feel free to fork the repository and submit a pull request. Any improvements or additional features are welcome!
