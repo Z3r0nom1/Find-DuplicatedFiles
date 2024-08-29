@@ -16,67 +16,57 @@ function Find-PSOneDuplicateFile {
         return
     }
 
-    # Initialize CSV file with correct headers
+    # Initialize CSV files
     if (Test-Path $HashedCsvPath) {
         Remove-Item $HashedCsvPath -Force
     }
-    $header = "HASH,Filename"
-    Out-File -FilePath $HashedCsvPath -InputObject $header -Encoding UTF8
+    $header = @("HASH", "Filename")
+    $header -join "," | Out-File -FilePath $HashedCsvPath -Force
 
     # Define batch size
     $batchSize = 1000
-    $fileIndex = 0
 
     # Create a list to hold file paths for the current batch
     $batchFiles = @()
 
-    # Get total file count for progress calculation
-    $totalFiles = (Get-ChildItem -Path $Path -Filter $Filter -File -Recurse -ErrorAction SilentlyContinue | Where-Object {
-        $fileDir = $_.DirectoryName -replace '\\$', ''
-        $fileDirLower = $fileDir.ToLower()
-        $normalizedExcludedFolders -notcontains $fileDirLower
-    }).Count
+    # Enumerate files using .NET method for better performance
+    $allFiles = [System.IO.Directory]::EnumerateFiles($Path, $Filter, [System.IO.SearchOption]::AllDirectories)
+    $totalFiles = ($allFiles | Measure-Object).Count
+    $processedFiles = 0
 
-    # Calculate the total number of batches
-    $totalBatches = [math]::Ceiling($totalFiles / $batchSize)
-
-    # Enumerate files and process in batches
-    Get-ChildItem -Path $Path -Filter $Filter -File -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-        $file = $_
+    foreach ($filePath in $allFiles) {
+        $file = New-Object -TypeName System.IO.FileInfo -ArgumentList $filePath
         $fileDir = $file.DirectoryName -replace '\\$', ''
         $fileDirLower = $fileDir.ToLower()
 
-        $exclude = $false
-        foreach ($excludedFolder in $normalizedExcludedFolders) {
-            if ($fileDirLower -like "$excludedFolder*") {
-                $exclude = $true
-                break
-            }
-        }
+        # Optimized exclusion check
+        $exclude = $normalizedExcludedFolders | Where-Object { $fileDirLower -like "$_*" }
         if (-not $exclude) {
             # Add file to current batch
             $batchFiles += $file
 
+            # Update progress
+            if ($totalFiles -gt 0) {
+                $processedFiles++
+                $progressPercent = [math]::Round(($processedFiles / $totalFiles) * 100, 2)
+                Write-Progress -Activity "Processing Files" -Status "Processed $processedFiles of $totalFiles files" -PercentComplete $progressPercent
+            }
+
             # Process batch if the batch size is reached
             if ($batchFiles.Count -ge $batchSize) {
-                $fileIndex++
-                Write-Host "Processing batch $fileIndex of $totalBatches..."
                 Process-Batch -Files $batchFiles -CsvPath $HashedCsvPath
                 $batchFiles = @()  # Clear the batch
-                [GC]::Collect()  # Force garbage collection
-                [GC]::WaitForPendingFinalizers()  # Ensure all garbage is collected
             }
         }
     }
 
     # Process any remaining files
     if ($batchFiles.Count -gt 0) {
-        $fileIndex++
-        Write-Host "Processing batch $fileIndex of $totalBatches..."
         Process-Batch -Files $batchFiles -CsvPath $HashedCsvPath
-        [GC]::Collect()  # Force garbage collection
-        [GC]::WaitForPendingFinalizers()  # Ensure all garbage is collected
     }
+
+    # Complete progress bar
+    Write-Progress -Activity "Processing Files" -Status "Completed" -Completed
 
     Write-Host "Hashing completed."
 
@@ -84,26 +74,25 @@ function Find-PSOneDuplicateFile {
     Find-Duplicates -HashedCsvPath $HashedCsvPath -DuplicatesCsvPath $DuplicatesCsvPath
 }
 
+
 function Process-Batch {
     param (
         [Parameter(Mandatory)] [System.Collections.Generic.List[System.IO.FileInfo]] $Files,
         [String] $CsvPath
     )
 
-    $totalFiles = $Files.Count
-    $processedFiles = 0
+    # Accumulate CSV data in memory
+    $csvData = @()
 
     foreach ($file in $Files) {
         try {
-            $filePath = $file.FullName
-
             # Ensure the file is accessible before hashing
-            if (-not (Test-Path $filePath)) {
+            if (-not (Test-Path $file.FullName)) {
                 continue
             }
 
             # Use certutil to compute the file hash with quoted file path
-            $certutilCommand = "certutil -hashfile `"$filePath`" SHA1"
+            $certutilCommand = "certutil -hashfile `"$($file.FullName)`" SHA1"
             
             # Retry mechanism for certutil command
             $maxRetries = 3
@@ -124,18 +113,17 @@ function Process-Batch {
             if ($fileHash) {
                 $hashKey = $fileHash.ToString().Trim()
 
-                # Write results to CSV dynamically
-                "$hashKey,$filePath" | Out-File -FilePath $CsvPath -Append -Encoding UTF8
+                # Accumulate results for batch writing
+                $csvData += "$hashKey,$($file.FullName)"
             }
 
         } catch {
-            Write-Warning "Could not hash file: $filePath. Error: $_"
+            Write-Warning "Could not hash file: $($file.FullName). Error: $_"
         }
-
-        # Update progress output
-        $processedFiles++
-        Write-Progress -Activity "Computing hashes" -PercentComplete (($processedFiles / $totalFiles) * 100) -Status "Processing Files" -CurrentOperation "$processedFiles of $totalFiles files processed"
     }
+
+    # Write the entire batch to the CSV file at once
+    $csvData | Out-File -FilePath $CsvPath -Append
 }
 
 function Find-Duplicates {
