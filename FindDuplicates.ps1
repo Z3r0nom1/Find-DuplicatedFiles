@@ -46,7 +46,14 @@ function Find-PSOneDuplicateFile {
         $fileDir = $file.DirectoryName -replace '\\$', ''
         $fileDirLower = $fileDir.ToLower()
 
-        if ($normalizedExcludedFolders -notcontains $fileDirLower) {
+        $exclude = $false
+        foreach ($excludedFolder in $normalizedExcludedFolders) {
+            if ($fileDirLower -like "$excludedFolder*") {
+                $exclude = $true
+                break
+            }
+        }
+        if (-not $exclude) {
             # Add file to current batch
             $batchFiles += $file
 
