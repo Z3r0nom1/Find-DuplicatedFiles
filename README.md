@@ -2,21 +2,22 @@
 
 ## Overview
 
-`Find-PSOneDuplicateFile` is a PowerShell script designed to identify and manage duplicate files within a specified directory. The script recursively scans files, computes SHA1 hashes using `certutil`, and identifies duplicates based on these hashes. The results are saved to CSV files for easy review and further action.
+`Find-PSOneDuplicateFile` is a PowerShell script designed to identify and manage duplicate files within a specified directory. The script recursively scans files, computes SHA1 hashes using `Get-FileHash`, and identifies duplicates based on these hashes. The results are saved to CSV files for easy review and further action.
 
 ## Features
 
 - **Recursive File Search**: Scans all files in the specified directory and its subdirectories.
 - **Batch Processing**: Processes files in batches to optimize memory usage and performance.
 - **Exclusion of Folders**: Specify folders to exclude from the duplicate check.
-- **SHA1 Hashing**: Uses `certutil` to compute SHA1 hashes for files.
+- **SHA1 Hashing**: Uses `Get-FileHash` to compute SHA1 hashes for files.
+- **Immediate Hash Writing**: Writes hashes to the CSV file immediately after computation, freeing up memory.
 - **CSV Output**: Saves both hashed file data and duplicate file information to CSV files.
 - **Error Handling**: Includes mechanisms to handle file access issues and retry hashing operations.
 
 ## Prerequisites
 
 - PowerShell 5.0 or later.
-- Windows OS with `certutil` available (default on Windows).
+- Windows OS with `Get-FileHash` available (default on Windows).
 
 ## Script Parameters
 
@@ -71,7 +72,7 @@ This CSV file lists all files identified as duplicates based on their SHA1 hashe
 
 ## Error Handling
 
-The script includes mechanisms to handle common issues, such as inaccessible files or temporary file access errors. It will retry failed hash computations up to 3 times before skipping a file.
+The script includes mechanisms to handle common issues, such as inaccessible files or temporary file access errors. It will retry failed hash computations up to 3 times before skipping a file. Additionally, files already processed (with existing hashes) are skipped to avoid unnecessary computations.
 
 ## Acknowledgments
 
